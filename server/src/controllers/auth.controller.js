@@ -5,8 +5,18 @@ import {
   logoutUser,
 } from "../services/auth.service.js";
 
+import { randomBytes, timingSafeEqual } from "node:crypto";
+
+import {
+  getGoogleAuthUrl,
+  authenticateGoogleUser,
+} from "../services/google-auth.service.js";
+
 import { findUserById } from "../repositories/user.repository.js";
 import ApiError from "../utils/ApiError.utils.js";
+
+// Frontend URL
+const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
 // Cookie configuration
 const isProduction = process.env.NODE_ENV === "production";
@@ -26,6 +36,15 @@ const accessTokenOptions = {
 const refreshTokenOptions = {
   ...cookieOptions,
   maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+// Google OAuth state cookie configuration
+const googleStateCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: "lax",
+  path: "/api/auth/google/callback",
+  maxAge: 5 * 60 * 1000,
 };
 
 // Set authentication cookies
@@ -115,4 +134,83 @@ const getCurrentUser = async (req, res) => {
   });
 };
 
-export { register, login, refresh, logout, getCurrentUser };
+// Start Google OAuth
+const googleLogin = (req, res) => {
+  const state = randomBytes(32).toString("hex");
+
+  res.cookie("googleOAuthState", state, googleStateCookieOptions);
+
+  const authUrl = getGoogleAuthUrl(state);
+
+  return res.redirect(authUrl);
+};
+
+// Handle Google's callback
+const googleCallback = async (req, res) => {
+  const { code, state, error } = req.query;
+
+  const storedState = req.cookies?.googleOAuthState;
+
+  // Clear OAuth state cookie after callback
+  res.clearCookie("googleOAuthState", googleStateCookieOptions);
+
+  // Redirect to frontend with an error
+  const redirectWithError = (errorCode) => {
+    return res.redirect(
+      `${frontendUrl}/auth/callback?error=${encodeURIComponent(errorCode)}`
+    );
+  };
+
+  // Google returned an error
+  if (error) {
+    return redirectWithError("google_auth_cancelled");
+  }
+
+  // Validate callback parameters
+  if (
+    typeof code !== "string" ||
+    typeof state !== "string" ||
+    typeof storedState !== "string"
+  ) {
+    return redirectWithError("invalid_google_callback");
+  }
+
+  // Validate OAuth state to prevent CSRF
+  const receivedState = Buffer.from(state);
+  const expectedState = Buffer.from(storedState);
+
+  if (
+    receivedState.length !== expectedState.length ||
+    !timingSafeEqual(receivedState, expectedState)
+  ) {
+    return redirectWithError("invalid_google_state");
+  }
+
+  try {
+    const result = await authenticateGoogleUser(code);
+
+    // Set authentication cookies
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+
+    // Redirect to frontend after successful authentication
+    return res.redirect(`${frontendUrl}/auth/callback`);
+  } catch (error) {
+    console.error("Google OAuth callback failed:", error.message);
+
+    if (error.statusCode === 409) {
+      return redirectWithError("google_account_exists");
+    }
+
+    return redirectWithError("google_auth_failed");
+  }
+};
+
+export {
+  register,
+  login,
+  refresh,
+  logout,
+  getCurrentUser,
+  googleLogin,
+  googleCallback,
+};

@@ -126,7 +126,7 @@ const registerUser = async ({ username, fullName, email, password }) => {
 const loginUser = async ({ email, password }) => {
   const user = await findUserByEmail(email);
 
-  if (!user) {
+  if (!user || !user.password_hash) {
     throw new ApiError(401, "Invalid email or password");
   }
 
@@ -211,4 +211,4 @@ const logoutUser = async (refreshToken) => {
   }
 };
 
-export { registerUser, loginUser, refreshUserTokens, logoutUser };
+export { registerUser, loginUser, refreshUserTokens, logoutUser, generateAuthTokens };

@@ -1,8 +1,5 @@
-import dotenv from "dotenv";
 import app from "./app.js";
 import { pool } from "./config/db.config.js";
-
-dotenv.config();
 
 const PORT = Number(process.env.PORT || 5000);
 
