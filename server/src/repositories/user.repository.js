@@ -1,7 +1,11 @@
 import { pool } from "../config/db.config.js";
 
 // Create a new user
-const createUser = async ({ username, fullName, email, passwordHash }) => {
+// Accepts a transaction client when provided; otherwise uses the pool.
+const createUser = async (
+  { username, fullName, email, passwordHash },
+  db = pool
+) => {
   const query = `
     INSERT INTO users (username, full_name, email, password_hash)
     VALUES ($1, $2, $3, $4)
@@ -10,7 +14,7 @@ const createUser = async ({ username, fullName, email, passwordHash }) => {
 
   const values = [username, fullName, email, passwordHash];
 
-  const { rows } = await pool.query(query, values);
+  const { rows } = await db.query(query, values);
 
   return rows[0];
 };

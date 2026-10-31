@@ -25,13 +25,17 @@ app.get("/api/health", (req, res) => {
 });
 
 app.get("/api/health/cron", (req, res) => {
-  console.log("/api/health/cron is called!")
+  console.log("/api/health/cron is called!");
   res.status(200).json({
     status: "OK",
     service: "GenZineer API",
     timestamp: new Date().toISOString(),
   });
 });
+
+import authRoutes from "./routes/auth.routes.js";
+
+app.use("/api/auth", authRoutes);
 
 app.use(errorHandler);
 
