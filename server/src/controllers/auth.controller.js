@@ -6,13 +6,17 @@ import {
 } from "../services/auth.service.js";
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { verifyEmailAddress } from "../services/email-verification.service.js";
 
 import {
   getGoogleAuthUrl,
   authenticateGoogleUser,
 } from "../services/google-auth.service.js";
 
+import { sendVerificationEmail } from "../services/email-verification-email.service.js";
+
 import { findUserById } from "../repositories/user.repository.js";
+
 import ApiError from "../utils/ApiError.utils.js";
 
 // Frontend URL
@@ -64,22 +68,41 @@ const register = async (req, res) => {
     password,
   });
 
+  // Attempt to send the email verification link.
+  let verificationEmailSent = false;
+
+  try {
+    await sendVerificationEmail({
+      userId: result.user.id,
+      email: result.user.email,
+      fullName: result.user.full_name,
+    });
+
+    verificationEmailSent = true;
+  } catch (error) {
+    console.error("Verification email sending failed:", error.message);
+  }
+
+  // Set authentication cookies.
   setAuthCookies(res, result.accessToken, result.refreshToken);
 
   return res.status(201).json({
     success: true,
-    message: "User registered successfully",
+    message: verificationEmailSent
+      ? "Registration successful. Please verify your email."
+      : "Registration successful, but verification email could not be sent.",
     data: {
       user: result.user,
+      verificationEmailSent,
     },
   });
 };
 
 // Login an existing user
 const login = async (req, res) => {
-  const { email, password } = req.body;
+  const { identifier, password } = req.body;
 
-  const result = await loginUser({ email, password });
+  const result = await loginUser({ identifier, password });
 
   setAuthCookies(res, result.accessToken, result.refreshToken);
 
@@ -88,6 +111,21 @@ const login = async (req, res) => {
     message: "Login successful",
     data: {
       user: result.user,
+    },
+  });
+};
+
+// Verify a user's email address
+const verifyEmail = async (req, res) => {
+  const { token } = req.query;
+
+  const user = await verifyEmailAddress(token);
+
+  return res.status(200).json({
+    success: true,
+    message: "Email address verified successfully",
+    data: {
+      user,
     },
   });
 };
@@ -211,6 +249,7 @@ export {
   refresh,
   logout,
   getCurrentUser,
+  verifyEmail,
   googleLogin,
   googleCallback,
 };

@@ -57,6 +57,18 @@ const findUserByUsername = async (username) => {
   return rows[0] ?? null;
 };
 
+const findUserByUsernameForAuth = async (username) => {
+  const query = `
+    SELECT *
+    FROM users
+    WHERE username = $1;
+  `;
+
+  const { rows } = await pool.query(query, [username]);
+
+  return rows[0] ?? null;
+};
+
 // Find a user by ID.
 const findUserById = async (id) => {
   const query = `
@@ -89,4 +101,5 @@ export {
   findUserByUsername,
   findUserById,
   findUserByGoogleId,
+  findUserByUsernameForAuth
 };

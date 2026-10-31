@@ -33,12 +33,11 @@ const registerSchema = z.object({
 
 // Login validation
 const loginSchema = z.object({
-  email: z
+  identifier: z
     .string()
     .trim()
-    .toLowerCase()
-    .email("Please provide a valid email address")
-    .max(255, "Email cannot exceed 255 characters"),
+    .min(1, "Email or username is required")
+    .max(255, "Email or username cannot exceed 255 characters"),
 
   password: z
     .string()

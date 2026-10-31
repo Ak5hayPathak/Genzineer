@@ -7,6 +7,7 @@ import {
   createUser,
   findUserByEmail,
   findUserByUsername,
+  findUserByUsernameForAuth
 } from "../repositories/user.repository.js";
 
 import {
@@ -123,24 +124,34 @@ const registerUser = async ({ username, fullName, email, password }) => {
 };
 
 // Login an existing user
-const loginUser = async ({ email, password }) => {
-  const user = await findUserByEmail(email);
+const loginUser = async ({ identifier, password }) => {
+  const isEmail = identifier.includes("@");
+
+  const user = isEmail
+    ? await findUserByEmail(identifier.toLowerCase())
+    : await findUserByUsernameForAuth(identifier);
 
   if (!user || !user.password_hash) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(401, "Invalid email/username or password");
   }
 
-  const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+  const isPasswordValid = await bcrypt.compare(
+    password,
+    user.password_hash
+  );
 
   if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(401, "Invalid email/username or password");
   }
 
-  const { password_hash, ...safeUser } = user;
+  const { password_hash, google_id, ...safeUser } = user;
 
   const tokens = await generateAuthTokens(safeUser);
 
-  return { user: safeUser, ...tokens };
+  return {
+    user: safeUser,
+    ...tokens,
+  };
 };
 
 // Refresh access and refresh tokens

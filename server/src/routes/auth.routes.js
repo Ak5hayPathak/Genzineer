@@ -6,6 +6,7 @@ import {
   refresh,
   logout,
   getCurrentUser,
+  verifyEmail,
   googleLogin,
   googleCallback,
 } from "../controllers/auth.controller.js";
@@ -20,6 +21,9 @@ const router = Router();
 // Email/password authentication.
 router.post("/register", validate(registerSchema), register);
 router.post("/login", validate(loginSchema), login);
+
+// Email verification.
+router.get("/verify-email", verifyEmail);
 
 // Google OAuth authentication.
 router.get("/google", googleLogin);
