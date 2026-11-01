@@ -7,7 +7,7 @@ import {
   createUser,
   findUserByEmail,
   findUserByUsername,
-  findUserByUsernameForAuth
+  findUserByUsernameForAuth,
 } from "../repositories/user.repository.js";
 
 import {
@@ -135,10 +135,7 @@ const loginUser = async ({ identifier, password }) => {
     throw new ApiError(401, "Invalid email/username or password");
   }
 
-  const isPasswordValid = await bcrypt.compare(
-    password,
-    user.password_hash
-  );
+  const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
   if (!isPasswordValid) {
     throw new ApiError(401, "Invalid email/username or password");
@@ -222,4 +219,10 @@ const logoutUser = async (refreshToken) => {
   }
 };
 
-export { registerUser, loginUser, refreshUserTokens, logoutUser, generateAuthTokens };
+export {
+  registerUser,
+  loginUser,
+  refreshUserTokens,
+  logoutUser,
+  generateAuthTokens,
+};
