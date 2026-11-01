@@ -1,11 +1,11 @@
 import ApiError from "../utils/ApiError.utils.js";
 
-const GOOGLE_APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
-const EMAIL_API_SECRET = process.env.EMAIL_API_SECRET;
-
 // Send an email through Google Apps Script.
 const sendEmail = async ({ to, subject, htmlBody }) => {
-  if (!GOOGLE_APPS_SCRIPT_URL || !EMAIL_API_SECRET) {
+  const scriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
+  const emailApiSecret = process.env.EMAIL_API_SECRET;
+
+  if (!scriptUrl || !emailApiSecret) {
     throw new ApiError(500, "Email service is not configured");
   }
 
@@ -13,14 +13,26 @@ const sendEmail = async ({ to, subject, htmlBody }) => {
     throw new ApiError(400, "Recipient, subject, and email body are required");
   }
 
+  let url;
+
   try {
-    const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+    url = new URL(scriptUrl);
+  } catch {
+    throw new ApiError(500, "Email service URL is invalid");
+  }
+
+  if (url.protocol !== "https:") {
+    throw new ApiError(500, "Email service must use HTTPS");
+  }
+
+  try {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        secret: EMAIL_API_SECRET,
+        secret: emailApiSecret,
         to,
         subject,
         htmlBody,
@@ -34,10 +46,8 @@ const sendEmail = async ({ to, subject, htmlBody }) => {
 
     const result = await response.json();
 
-    if (!result.success) {
-      console.error("Google Apps Script email error:", result.message);
-
-      throw new Error("Email delivery was unsuccessful");
+    if (!result?.success) {
+      throw new Error(result?.message || "Email delivery was unsuccessful");
     }
 
     return {
@@ -46,10 +56,6 @@ const sendEmail = async ({ to, subject, htmlBody }) => {
     };
   } catch (error) {
     console.error("Email delivery failed:", error.message);
-
-    if (error instanceof ApiError) {
-      throw error;
-    }
 
     throw new ApiError(502, "Unable to send email. Please try again later.");
   }

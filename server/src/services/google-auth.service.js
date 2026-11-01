@@ -14,6 +14,11 @@ import { generateAuthTokens } from "./auth.service.js";
 
 import ApiError from "../utils/ApiError.utils.js";
 
+const sanitizeUser = (user) => {
+  const { password_hash, google_id, ...safeUser } = user;
+  return safeUser;
+};
+
 // Generate Google's authorization URL.
 const getGoogleAuthUrl = (state) => {
   return googleOAuthClient.generateAuthUrl({
@@ -24,9 +29,7 @@ const getGoogleAuthUrl = (state) => {
 
 // Generate a unique username for a Google user.
 const generateGoogleUsername = async (email) => {
-  const emailPrefix = email.split("@")[0];
-
-  let baseUsername = emailPrefix.replace(/[^a-zA-Z0-9_]/g, "");
+  let baseUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
 
   if (baseUsername.length < 3) {
     baseUsername = `user_${baseUsername}`;
@@ -45,16 +48,19 @@ const generateGoogleUsername = async (email) => {
 
 // Authenticate a user using Google's authorization code.
 const authenticateGoogleUser = async (code) => {
-  let idToken;
+  if (!code) {
+    throw new ApiError(400, "Google authorization code is required");
+  }
+
+  let tokens;
 
   try {
-    const { tokens } = await googleOAuthClient.getToken(code);
-    idToken = tokens.id_token;
+    ({ tokens } = await googleOAuthClient.getToken(code));
   } catch {
     throw new ApiError(401, "Google authentication failed");
   }
 
-  if (!idToken) {
+  if (!tokens.id_token) {
     throw new ApiError(401, "Google did not provide an identity token");
   }
 
@@ -62,7 +68,7 @@ const authenticateGoogleUser = async (code) => {
 
   try {
     const ticket = await googleOAuthClient.verifyIdToken({
-      idToken,
+      idToken: tokens.id_token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
@@ -76,7 +82,7 @@ const authenticateGoogleUser = async (code) => {
     email,
     email_verified: emailVerified,
     name,
-  } = googlePayload;
+  } = googlePayload ?? {};
 
   if (!googleId || !email || !emailVerified) {
     throw new ApiError(
@@ -85,19 +91,23 @@ const authenticateGoogleUser = async (code) => {
     );
   }
 
+  const normalizedEmail = email.toLowerCase();
+
   // Check whether this Google account already exists.
   const existingGoogleUser = await findUserByGoogleId(googleId);
 
   if (existingGoogleUser) {
-    const { password_hash, google_id, ...safeUser } = existingGoogleUser;
+    const user = sanitizeUser(existingGoogleUser);
+    const authTokens = await generateAuthTokens(user);
 
-    const tokens = await generateAuthTokens(safeUser);
-
-    return { user: safeUser, ...tokens };
+    return {
+      user,
+      ...authTokens,
+    };
   }
 
   // Do not automatically link an existing email/password account.
-  const existingEmailUser = await findUserByEmail(email);
+  const existingEmailUser = await findUserByEmail(normalizedEmail);
 
   if (existingEmailUser) {
     throw new ApiError(
@@ -106,9 +116,8 @@ const authenticateGoogleUser = async (code) => {
     );
   }
 
-  const username = await generateGoogleUsername(email);
-
-  const fullName = name?.trim() || email.split("@")[0];
+  const username = await generateGoogleUsername(normalizedEmail);
+  const fullName = name?.trim() || normalizedEmail.split("@")[0];
 
   const client = await pool.connect();
 
@@ -119,17 +128,20 @@ const authenticateGoogleUser = async (code) => {
       {
         username,
         fullName,
-        email,
+        email: normalizedEmail,
         googleId,
       },
       client
     );
 
-    const tokens = await generateAuthTokens(user, client);
+    const authTokens = await generateAuthTokens(user, client);
 
     await client.query("COMMIT");
 
-    return { user, ...tokens };
+    return {
+      user: sanitizeUser(user),
+      ...authTokens,
+    };
   } catch (error) {
     try {
       await client.query("ROLLBACK");

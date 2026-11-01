@@ -4,13 +4,13 @@ import { sendEmail } from "./email.service.js";
 import { createEmailVerificationTemplate } from "../utils/email-templates.utils.js";
 
 const sendVerificationEmail = async ({ userId, email, fullName }) => {
-  const { token } = await generateEmailVerificationToken(userId);
-
   const backendUrl = process.env.BACKEND_URL;
 
   if (!backendUrl) {
     throw new Error("BACKEND_URL is not configured");
   }
+
+  const { token } = await generateEmailVerificationToken(userId);
 
   const verificationUrl = new URL("/api/auth/verify-email", backendUrl);
 

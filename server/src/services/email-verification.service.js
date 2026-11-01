@@ -11,20 +11,19 @@ import {
 
 import ApiError from "../utils/ApiError.utils.js";
 
-// Verification tokens expire after 24 hours.
 const EMAIL_VERIFICATION_TOKEN_EXPIRY = 24 * 60 * 60 * 1000;
 
-// Hash a verification token using SHA-256.
-const hashVerificationToken = (token) => {
-  return createHash("sha256").update(token).digest("hex");
-};
+const hashVerificationToken = (token) =>
+  createHash("sha256").update(token).digest("hex");
 
 // Generate and store a new email verification token.
 const generateEmailVerificationToken = async (userId) => {
+  if (!userId) {
+    throw new ApiError(400, "User ID is required");
+  }
+
   const token = randomBytes(32).toString("hex");
-
   const tokenHash = hashVerificationToken(token);
-
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_EXPIRY);
 
   const client = await pool.connect();
@@ -32,10 +31,8 @@ const generateEmailVerificationToken = async (userId) => {
   try {
     await client.query("BEGIN");
 
-    // Invalidate previously issued, unused tokens.
     await revokeActiveEmailVerificationTokens(userId, client);
 
-    // Store the hash instead of the original token.
     await createEmailVerificationToken(
       {
         userId,
@@ -47,13 +44,14 @@ const generateEmailVerificationToken = async (userId) => {
 
     await client.query("COMMIT");
 
-    // Return the original token for the email service.
-    return {
-      token,
-      expiresAt,
-    };
+    return { token, expiresAt };
   } catch (error) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error("Token generation rollback failed:", rollbackError);
+    }
+
     throw error;
   } finally {
     client.release();
@@ -67,13 +65,11 @@ const verifyEmailAddress = async (token) => {
   }
 
   const tokenHash = hashVerificationToken(token);
-
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    // Atomically consume the token if it is valid.
     const verificationToken = await consumeEmailVerificationToken(
       tokenHash,
       client
@@ -86,14 +82,12 @@ const verifyEmailAddress = async (token) => {
       );
     }
 
-    // Mark the associated user's email as verified.
     const user = await markUserEmailVerified(verificationToken.user_id, client);
 
     if (!user) {
       throw new ApiError(404, "User not found");
     }
 
-    // Invalidate any other outstanding verification tokens.
     await revokeActiveEmailVerificationTokens(
       verificationToken.user_id,
       client
@@ -103,7 +97,12 @@ const verifyEmailAddress = async (token) => {
 
     return user;
   } catch (error) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error("Email verification rollback failed:", rollbackError);
+    }
+
     throw error;
   } finally {
     client.release();

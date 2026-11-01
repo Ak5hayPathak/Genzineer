@@ -22,16 +22,17 @@ import {
   verifyRefreshToken,
 } from "../utils/token.utils.js";
 
-// IMPORTANT: ApiError is a default export in your utility file.
 import ApiError from "../utils/ApiError.utils.js";
 
-// Hash a refresh token using SHA-256
-const hashRefreshToken = (token) => {
-  return createHash("sha256").update(token).digest("hex");
+const hashRefreshToken = (token) =>
+  createHash("sha256").update(token).digest("hex");
+
+const sanitizeUser = (user) => {
+  const { password_hash, google_id, ...safeUser } = user;
+  return safeUser;
 };
 
-// Generate tokens and create an authentication session
-// Accepts a transaction client when provided.
+// Generate tokens and create an authentication session.
 const generateAuthTokens = async (user, db = pool) => {
   const sessionId = randomUUID();
 
@@ -44,8 +45,8 @@ const generateAuthTokens = async (user, db = pool) => {
   const refreshToken = generateRefreshToken(payload);
 
   const refreshTokenHash = hashRefreshToken(refreshToken);
-
   const decodedToken = verifyRefreshToken(refreshToken);
+
   const expiresAt = new Date(decodedToken.exp * 1000);
 
   await createAuthSession(
@@ -61,7 +62,7 @@ const generateAuthTokens = async (user, db = pool) => {
   return { accessToken, refreshToken };
 };
 
-// Register a new user
+// Register a new user.
 const registerUser = async ({ username, fullName, email, password }) => {
   const existingEmail = await findUserByEmail(email);
 
@@ -76,7 +77,6 @@ const registerUser = async ({ username, fullName, email, password }) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-
   const client = await pool.connect();
 
   try {
@@ -96,7 +96,10 @@ const registerUser = async ({ username, fullName, email, password }) => {
 
     await client.query("COMMIT");
 
-    return { user, ...tokens };
+    return {
+      user: sanitizeUser(user),
+      ...tokens,
+    };
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -104,7 +107,6 @@ const registerUser = async ({ username, fullName, email, password }) => {
       console.error("Registration rollback failed:", rollbackError);
     }
 
-    // Handle duplicate email or username errors.
     if (error.code === "23505") {
       if (error.constraint === "users_email_key") {
         throw new ApiError(409, "Email is already registered");
@@ -123,7 +125,7 @@ const registerUser = async ({ username, fullName, email, password }) => {
   }
 };
 
-// Login an existing user
+// Login an existing user.
 const loginUser = async ({ identifier, password }) => {
   const isEmail = identifier.includes("@");
 
@@ -141,8 +143,7 @@ const loginUser = async ({ identifier, password }) => {
     throw new ApiError(401, "Invalid email/username or password");
   }
 
-  const { password_hash, google_id, ...safeUser } = user;
-
+  const safeUser = sanitizeUser(user);
   const tokens = await generateAuthTokens(safeUser);
 
   return {
@@ -151,7 +152,7 @@ const loginUser = async ({ identifier, password }) => {
   };
 };
 
-// Refresh access and refresh tokens
+// Refresh access and refresh tokens.
 const refreshUserTokens = async (refreshToken) => {
   if (!refreshToken) {
     throw new ApiError(401, "Refresh token is required");
@@ -200,7 +201,7 @@ const refreshUserTokens = async (refreshToken) => {
   };
 };
 
-// Logout and revoke the current session
+// Logout and revoke the current session.
 const logoutUser = async (refreshToken) => {
   if (!refreshToken) return;
 
