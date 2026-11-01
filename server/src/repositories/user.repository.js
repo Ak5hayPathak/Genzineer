@@ -1,7 +1,6 @@
 import { pool } from "../config/db.config.js";
 
 // Create a new user.
-// Accepts a transaction client when provided; otherwise uses the pool.
 const createUser = async (
   { username, fullName, email, passwordHash = null, googleId = null },
   db = pool
@@ -32,65 +31,78 @@ const createUser = async (
 };
 
 // Find a user by email.
-const findUserByEmail = async (email) => {
+const findUserByEmail = async (email, db = pool) => {
   const query = `
     SELECT *
     FROM users
     WHERE email = $1;
   `;
 
-  const { rows } = await pool.query(query, [email]);
+  const { rows } = await db.query(query, [email]);
 
   return rows[0] ?? null;
 };
 
 // Find a user by username.
-const findUserByUsername = async (username) => {
+const findUserByUsername = async (username, db = pool) => {
   const query = `
-    SELECT id, username, full_name, email, created_at, updated_at
+    SELECT
+      id,
+      username,
+      full_name,
+      email,
+      created_at,
+      updated_at
     FROM users
     WHERE username = $1;
   `;
 
-  const { rows } = await pool.query(query, [username]);
+  const { rows } = await db.query(query, [username]);
 
   return rows[0] ?? null;
 };
 
-const findUserByUsernameForAuth = async (username) => {
+// Find a user by username for authentication.
+const findUserByUsernameForAuth = async (username, db = pool) => {
   const query = `
     SELECT *
     FROM users
     WHERE username = $1;
   `;
 
-  const { rows } = await pool.query(query, [username]);
+  const { rows } = await db.query(query, [username]);
 
   return rows[0] ?? null;
 };
 
 // Find a user by ID.
-const findUserById = async (id) => {
+const findUserById = async (id, db = pool) => {
   const query = `
-    SELECT id, username, full_name, email, created_at, updated_at
+    SELECT
+      id,
+      username,
+      full_name,
+      email,
+      created_at,
+      updated_at
     FROM users
     WHERE id = $1;
   `;
 
-  const { rows } = await pool.query(query, [id]);
+  const { rows } = await db.query(query, [id]);
 
   return rows[0] ?? null;
 };
 
 // Find a user by Google account ID.
-const findUserByGoogleId = async (googleId) => {
+const findUserByGoogleId = async (googleId, db = pool) => {
   const query = `
     SELECT *
     FROM users
     WHERE google_id = $1;
   `;
 
-  const { rows } = await pool.query(query, [googleId]);
+  const { rows } = await db.query(query, [googleId]);
 
   return rows[0] ?? null;
 };
@@ -99,7 +111,7 @@ export {
   createUser,
   findUserByEmail,
   findUserByUsername,
+  findUserByUsernameForAuth,
   findUserById,
   findUserByGoogleId,
-  findUserByUsernameForAuth
 };
